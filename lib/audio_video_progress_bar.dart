@@ -243,7 +243,7 @@ class ProgressBar extends LeafRenderObjectWidget {
 
   /// The [TextStyle] used by the time labels.
   ///
-  /// By default it is [TextTheme.bodyLarge].
+  /// By default it is [TextTheme.bodyText1].
   final TextStyle? timeLabelTextStyle;
 
   /// The extra space between the time labels and the progress bar.
@@ -257,7 +257,6 @@ class ProgressBar extends LeafRenderObjectWidget {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
     final textStyle = timeLabelTextStyle ?? theme.textTheme.bodyLarge;
-    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
     return _RenderProgressBar(
       progress: progress,
       total: total,
@@ -281,7 +280,6 @@ class ProgressBar extends LeafRenderObjectWidget {
       timeLabelType: timeLabelType ?? TimeLabelType.totalTime,
       timeLabelTextStyle: textStyle,
       timeLabelPadding: timeLabelPadding,
-      textScaleFactor: textScaleFactor,
     );
   }
 
@@ -290,7 +288,6 @@ class ProgressBar extends LeafRenderObjectWidget {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
     final textStyle = timeLabelTextStyle ?? theme.textTheme.bodyLarge;
-    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
     (renderObject as _RenderProgressBar)
       ..progress = progress
       ..total = total
@@ -313,8 +310,7 @@ class ProgressBar extends LeafRenderObjectWidget {
       ..timeLabelLocation = timeLabelLocation ?? TimeLabelLocation.below
       ..timeLabelType = timeLabelType ?? TimeLabelType.totalTime
       ..timeLabelTextStyle = textStyle
-      ..timeLabelPadding = timeLabelPadding
-      ..textScaleFactor = textScaleFactor;
+      ..timeLabelPadding = timeLabelPadding;
   }
 
   @override
@@ -429,8 +425,8 @@ class _RenderProgressBar extends RenderBox {
     required TimeLabelType timeLabelType,
     TextStyle? timeLabelTextStyle,
     double timeLabelPadding = 0.0,
-    double textScaleFactor = 1.0,
-  })  : _total = total,
+  })  : _progress = progress,
+        _total = total,
         _buffered = buffered,
         _onSeek = onSeek,
         _onDragStartUserCallback = onDragStart,
@@ -449,17 +445,13 @@ class _RenderProgressBar extends RenderBox {
         _timeLabelLocation = timeLabelLocation,
         _timeLabelType = timeLabelType,
         _timeLabelTextStyle = timeLabelTextStyle,
-        _timeLabelPadding = timeLabelPadding,
-        _textScaleFactor = textScaleFactor {
+        _timeLabelPadding = timeLabelPadding {
     _drag = _EagerHorizontalDragGestureRecognizer()
       ..onStart = _onDragStart
       ..onUpdate = _onDragUpdate
       ..onEnd = _onDragEnd
       ..onCancel = _finishDrag;
-    if (!_userIsDraggingThumb) {
-      _progress = progress;
-      _thumbValue = _proportionOfTotal(_progress);
-    }
+    _thumbValue = _proportionOfTotal(_progress);
   }
 
   // This is the gesture recognizer used to move the thumb.
@@ -541,7 +533,6 @@ class _RenderProgressBar extends RenderBox {
     final barWidth = barEnd - barStart;
     final position = (dx - barStart).clamp(0.0, barWidth);
     _thumbValue = (position / barWidth);
-    _progress = _currentThumbDuration();
     markNeedsPaint();
   }
 
@@ -549,29 +540,19 @@ class _RenderProgressBar extends RenderBox {
   ///
   /// This is used to update the thumb value and the left time label.
   Duration get progress => _progress;
-  Duration _progress = Duration.zero;
+  Duration _progress;
   set progress(Duration value) {
-    final clamp = _clampDuration(value);
-    if (_progress == clamp) {
+    if (_progress == value) {
       return;
     }
-    if (_labelLengthDifferent(_progress, clamp)) {
+    if (_progress.inHours != value.inHours) {
       _clearLabelCache();
     }
+    _progress = value;
     if (!_userIsDraggingThumb) {
-      _progress = clamp;
-      _thumbValue = _proportionOfTotal(clamp);
+      _thumbValue = _proportionOfTotal(value);
     }
     markNeedsPaint();
-  }
-
-  bool _labelLengthDifferent(Duration first, Duration second) {
-    return (first.inMinutes < 10 && second.inMinutes >= 10) ||
-        (first.inMinutes >= 10 && second.inMinutes < 10) ||
-        (first.inHours == 0 && second.inHours != 0) ||
-        (first.inHours != 0 && second.inHours == 0) ||
-        (first.inHours < 10 && second.inHours >= 10) ||
-        (first.inHours >= 10 && second.inHours < 10);
   }
 
   TextPainter? _cachedLeftLabel;
@@ -612,7 +593,6 @@ class _RenderProgressBar extends RenderBox {
     TextPainter textPainter = TextPainter(
       text: TextSpan(text: text, style: _timeLabelTextStyle),
       textDirection: TextDirection.ltr,
-      textScaleFactor: textScaleFactor,
     );
     textPainter.layout(minWidth: 0, maxWidth: double.infinity);
     return textPainter;
@@ -622,14 +602,13 @@ class _RenderProgressBar extends RenderBox {
   Duration get total => _total;
   Duration _total;
   set total(Duration value) {
-    final clamp = (value.isNegative) ? Duration.zero : value;
-    if (_total == clamp) {
+    if (_total == value) {
       return;
     }
-    if (_labelLengthDifferent(_total, clamp)) {
+    if (_total.inHours != value.inHours) {
       _clearLabelCache();
     }
-    _total = clamp;
+    _total = value;
     if (!_userIsDraggingThumb) {
       _thumbValue = _proportionOfTotal(progress);
     }
@@ -640,18 +619,11 @@ class _RenderProgressBar extends RenderBox {
   Duration get buffered => _buffered;
   Duration _buffered;
   set buffered(Duration value) {
-    final clamp = _clampDuration(value);
-    if (_buffered == clamp) {
+    if (_buffered == value) {
       return;
     }
-    _buffered = clamp;
+    _buffered = value;
     markNeedsPaint();
-  }
-
-  Duration _clampDuration(Duration value) {
-    if (value.isNegative) return Duration.zero;
-    if (value.compareTo(_total) > 0) return _total;
-    return value;
   }
 
   /// A callback for the audio duration position to where the thumb was moved.
@@ -825,17 +797,6 @@ class _RenderProgressBar extends RenderBox {
     markNeedsLayout();
   }
 
-  /// The text scale factor for the `progress` and `total` text labels.
-  /// By default the value is 1.0.
-  double get textScaleFactor => _textScaleFactor;
-  double _textScaleFactor;
-  set textScaleFactor(double value) {
-    if (_textScaleFactor == value) return;
-    _textScaleFactor = value;
-    _clearLabelCache();
-    markNeedsLayout();
-  }
-
   // The smallest that this widget would ever want to be.
   static const _minDesiredWidth = 100.0;
 
@@ -999,7 +960,7 @@ class _RenderProgressBar extends RenderBox {
   ///
   void _drawProgressBarWithoutLabels(Canvas canvas) {
     final barWidth = size.width;
-    final barHeight = _heightWhenNoLabels();
+    final barHeight = 2 * _thumbRadius;
     _drawProgressBar(canvas, Offset.zero, Size(barWidth, barHeight));
   }
 
@@ -1122,7 +1083,6 @@ class _RenderProgressBar extends RenderBox {
   void increaseAction() {
     final newValue = _thumbValue + _semanticActionUnit;
     _thumbValue = (newValue).clamp(0.0, 1.0);
-    onSeek?.call(_currentThumbDuration());
     markNeedsPaint();
     markNeedsSemanticsUpdate();
   }
@@ -1130,7 +1090,6 @@ class _RenderProgressBar extends RenderBox {
   void decreaseAction() {
     final newValue = _thumbValue - _semanticActionUnit;
     _thumbValue = (newValue).clamp(0.0, 1.0);
-    onSeek?.call(_currentThumbDuration());
     markNeedsPaint();
     markNeedsSemanticsUpdate();
   }
